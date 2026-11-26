@@ -1,0 +1,26 @@
+# The Docker build context is the repository root (see docker/docker-compose.yml).
+# Keep it small and never send local build output or node_modules (native binaries are platform-specific).
+
+.git
+.github
+.idea
+.vscode
+**/.DS_Store
+**/*.iml
+**/*.log
+*.pdf
+*.md
+
+# Local environment files may hold secrets.
+**/.env
+
+# Backend build output
+backend/target
+
+# Frontend dependencies, build and test output
+**/node_modules
+frontend/dist
+frontend/coverage
+frontend/playwright-report
+frontend/test-results
+frontend/blob-report
