@@ -1,0 +1,90 @@
+# Default profile = local development against a locally installed PostgreSQL 15.
+# Every connection setting can be overridden with environment variables (used by Docker).
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  # Identifies this backend instance (Quartz cluster node id + task_executions.executed_by).
+  instance-id: ${INSTANCE_ID:local}
+  execution:
+    stuck-timeout: 5m           # RUNNING with no heartbeat for longer than this -> STUCK
+    stuck-check-interval: 1m    # how often the stuck-execution monitor runs
+    heartbeat-throttle: 10s     # a task's beats are written to the DB at most this often
+    retention: 30d              # execution history older than this is deleted
+    retention-cron: "0 0 3 * * ?"   # daily at 03:00 UTC
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+spring:
+  application:
+    name: scheduler
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/scheduler}
+    username: ${DB_USER:scheduler}
+    password: ${DB_PASSWORD:scheduler}
+    hikari:
+      # Quartz threads (10) + API requests + system jobs.
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate          # Flyway owns the schema; Hibernate only checks it matches the entities.
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        # Loads lazy collections (e.g. weekly days) of a whole page in batches instead of one query per row.
+        default_batch_fetch_size: 50
+
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never    # Quartz tables are created by Flyway (V4).
+    wait-for-jobs-to-complete-on-shutdown: true
+    properties:
+      org.quartz.scheduler.instanceName: scheduling-cluster
+      org.quartz.scheduler.instanceId: ${app.instance-id}
+      org.quartz.jobStore.driverDelegateClass: org.quartz.impl.jdbcjobstore.PostgreSQLDelegate
+      # Job data is stored as plain strings, not Java-serialized objects.
+      org.quartz.jobStore.useProperties: true
+      org.quartz.jobStore.isClustered: true
+      # Triggers are written inside our Spring transaction, and Quartz is signalled before it commits. Acquiring
+      # triggers under Quartz's row lock makes the scheduler thread wait for that commit instead of missing the
+      # new trigger and sleeping until its next poll (up to 30s), so "Run now" and retries start immediately.
+      org.quartz.jobStore.acquireTriggersWithinLock: true
+      org.quartz.jobStore.clusterCheckinInterval: 10000
+      org.quartz.jobStore.misfireThreshold: 60000
+      org.quartz.threadPool.threadCount: ${QUARTZ_THREADS:10}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  pattern:
+    # Instance id in every log line, so the 2-instance demo shows which backend did what.
+    level: "%5p [${app.instance-id}]"

@@ -1,0 +1,10 @@
+# Profile used by docker-compose. Connection details come from environment variables set in docker/docker-compose.yml.
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://db:5432/scheduler}
+
+app:
+  cors:
+    # In Docker the UI is served by nginx on the same origin as /api, so CORS is only needed for direct Swagger use.
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
